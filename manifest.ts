@@ -1,4 +1,5 @@
 import { Manifest } from "deno-slack-sdk/mod.ts";
+import ChaboWorkflow from "./workflows/chabo.ts";
 
 /**
  * The app manifest contains the app's configuration. This
@@ -6,11 +7,21 @@ import { Manifest } from "deno-slack-sdk/mod.ts";
  * https://api.slack.com/future/manifest
  */
 export default Manifest({
-  name: "slack-chabo",
-  description: "A blank template for building Slack apps with Deno",
-  icon: "assets/default_new_app_icon.png",
+  name: "chabo",
+  description: "話し相手になります",
+  icon: "assets/chabo_icon.png",
   functions: [],
-  workflows: [],
-  outgoingDomains: [],
-  botScopes: ["commands", "chat:write", "chat:write.public"],
+  workflows: [
+    ChaboWorkflow,
+  ],
+  outgoingDomains: [
+    "api.openai.com",
+  ],
+  botScopes: [
+    "commands",
+    "app_mentions:read",
+    "chat:write",
+    "chat:write.public",
+    "channels:read",
+  ],
 });
