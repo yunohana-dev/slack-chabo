@@ -4,6 +4,7 @@ import {
   CHATGPT_MODEL,
   SYSTEM_PROMPT,
 } from "../constants/chatGPT.ts";
+import { TALK_HISTORY_DATASTORE } from "../constants/slack.ts";
 
 const systemPrompt = {
   role: "system",
@@ -42,14 +43,23 @@ export const askGPTFunction = DefineFunction({
 
 export default SlackFunction(
   askGPTFunction,
-  async ({ inputs, env }) => {
+  async ({ inputs, client, env }) => {
     // メッセージからメンションを削除
     const content = inputs.message.replaceAll(/\<\@.+?\>/g, " ");
     const userPrompt = {
       role: "user",
       content,
     };
+    // データストアから会話履歴を取得
+    const historyRecord = await client.apps.datastore.get({
+      datastore: TALK_HISTORY_DATASTORE,
+      id: inputs.user_id,
+    });
+    const history = (historyRecord.item.history || []).map((h: string) =>
+      JSON.parse(h)
+    );
 
+    // ChatGPTへリクエスト
     const res = await fetch(
       CHATGPT_API_URL,
       {
@@ -61,6 +71,7 @@ export default SlackFunction(
         body: JSON.stringify({
           model: CHATGPT_MODEL,
           messages: [
+            ...history,
             systemPrompt,
             userPrompt,
           ],
@@ -80,6 +91,21 @@ export default SlackFunction(
     console.log("chatgpt api response", userPrompt, body);
     if (body.choices && body.choices.length >= 0) {
       const answer = body.choices[0].message.content as string;
+
+      // データストアの会話履歴を更新
+      const new_histories = [
+        ...history,
+        userPrompt,
+        { role: "assistant", content: answer },
+      ];
+      await client.apps.datastore.update({
+        datastore: TALK_HISTORY_DATASTORE,
+        item: {
+          id: inputs.user_id,
+          history: new_histories.map((h) => JSON.stringify(h)),
+        },
+      });
+
       return { outputs: { answer } };
     }
     return {
