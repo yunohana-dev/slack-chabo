@@ -45,7 +45,7 @@ export default SlackFunction(
   askGPTFunction,
   async ({ inputs, client, env }) => {
     // メッセージからメンションを削除
-    const content = inputs.message.replaceAll(/\<\@.+?\>/g, " ");
+    const content = inputs.message.replaceAll(/\<\@.+?\>/g, " ").trim();
     const userPrompt = {
       role: "user",
       content,
@@ -58,6 +58,32 @@ export default SlackFunction(
     const history = (historyRecord.item.history || []).map((h: string) =>
       JSON.parse(h)
     );
+    // コマンド分岐
+    console.log(content);
+    if (content.startsWith("/")) {
+      switch (content) {
+        case "/help":
+          return {
+            outputs: {
+              answer: `\`\`\`
+- /show_history: これまでの会話履歴を表示する
+- /clear_history: これまでの会話履歴を忘れる
+\`\`\``,
+            },
+          };
+        case "/show_history":
+          return {
+            outputs: {
+              answer: `
+\`\`\`
+${JSON.stringify(history, null, 2)}
+\`\`\``,
+            },
+          };
+        case "/clear_history":
+          return { outputs: { answer: "あれ、なんの話をしていましたっけ？" } };
+      }
+    }
 
     // ChatGPTへリクエスト
     const res = await fetch(
