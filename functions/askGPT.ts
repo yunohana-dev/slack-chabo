@@ -4,13 +4,12 @@ import {
   CHATGPT_MODEL,
   SYSTEM_PROMPT,
 } from "../constants/chatGPT.ts";
-import { TALK_HISTORY_DATASTORE } from "../constants/slack.ts";
+import { FindTalkHistory, UpdateTalkHistory } from "../utils/slack.ts";
 
 const systemPrompt = {
   role: "system",
   content: SYSTEM_PROMPT,
 };
-const serverErrorMessage = "ちょっと今調子悪いみたい";
 
 export const askGPTFunction = DefineFunction({
   callback_id: "askgpt_function",
@@ -27,6 +26,11 @@ export const askGPTFunction = DefineFunction({
         type: Schema.types.string,
         description: "Question to AI",
       },
+      is_aborted: {
+        type: Schema.types.boolean,
+        description: "Aborted Workflow",
+        default: false,
+      },
     },
     required: ["user_id", "message"],
   },
@@ -36,54 +40,29 @@ export const askGPTFunction = DefineFunction({
         type: Schema.types.string,
         description: "Answer from AI",
       },
+      error: {
+        type: Schema.types.string,
+        description: "Error Type",
+      },
     },
-    required: ["answer"],
+    required: [],
   },
 });
 
 export default SlackFunction(
   askGPTFunction,
   async ({ inputs, client, env }) => {
+    if (inputs.is_aborted) return { outputs: { answer: "" } };
+
     // メッセージからメンションを削除
     const content = inputs.message.replaceAll(/\<\@.+?\>/g, " ").trim();
     const userPrompt = {
       role: "user",
       content,
     };
+
     // データストアから会話履歴を取得
-    const historyRecord = await client.apps.datastore.get({
-      datastore: TALK_HISTORY_DATASTORE,
-      id: inputs.user_id,
-    });
-    const history = (historyRecord.item.history || []).map((h: string) =>
-      JSON.parse(h)
-    );
-    // コマンド分岐
-    console.log(content);
-    if (content.startsWith("/")) {
-      switch (content) {
-        case "/help":
-          return {
-            outputs: {
-              answer: `\`\`\`
-- /show_history: これまでの会話履歴を表示する
-- /clear_history: これまでの会話履歴を忘れる
-\`\`\``,
-            },
-          };
-        case "/show_history":
-          return {
-            outputs: {
-              answer: `
-\`\`\`
-${JSON.stringify(history, null, 2)}
-\`\`\``,
-            },
-          };
-        case "/clear_history":
-          return { outputs: { answer: "あれ、なんの話をしていましたっけ？" } };
-      }
-    }
+    const history = await FindTalkHistory(client, inputs.user_id);
 
     // ChatGPTへリクエスト
     const res = await fetch(
@@ -104,38 +83,30 @@ ${JSON.stringify(history, null, 2)}
         }),
       },
     );
+
     if (res.status != 200) {
       const body = await res.text();
-      console.log(
-        `Failed to call OpenAPI AI. status:${res.status} body:${body}`,
-      );
-      return {
-        outputs: { answer: serverErrorMessage },
-      };
+      const msg =
+        `Failed to call OpenAPI AI. status: ${res.status} body:${body}`;
+      console.log(msg);
+      return { outputs: { error: msg } };
     }
     const body = await res.json();
-    console.log("chatgpt api response", userPrompt, body);
-    if (body.choices && body.choices.length >= 0) {
-      const answer = body.choices[0].message.content as string;
+    console.log("Success to call OpenAPI AI. response: ", userPrompt, body);
 
-      // データストアの会話履歴を更新
-      const new_histories = [
-        ...history,
-        userPrompt,
-        { role: "assistant", content: answer },
-      ];
-      await client.apps.datastore.update({
-        datastore: TALK_HISTORY_DATASTORE,
-        item: {
-          id: inputs.user_id,
-          history: new_histories.map((h) => JSON.stringify(h)),
-        },
-      });
-
-      return { outputs: { answer } };
+    if (!body.choices || body.choices.length < 1) {
+      const msg = `No choices provided. response: ${JSON.stringify(body)}`;
+      return { outputs: { error: msg } };
     }
-    return {
-      error: `No choices provided. body:${JSON.stringify(body)}`,
-    };
+
+    const answer = body.choices[0].message.content as string;
+    // データストアの会話履歴を更新
+    const new_histories = [
+      ...history,
+      userPrompt,
+      { role: "assistant", content: answer },
+    ];
+    await UpdateTalkHistory(client, inputs.user_id, new_histories);
+    return { outputs: { answer } };
   },
 );
