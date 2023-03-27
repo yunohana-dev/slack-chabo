@@ -29,5 +29,6 @@ export default Manifest({
     "channels:read",
     "datastore:read",
     "datastore:write",
+    "files:write",
   ],
 });

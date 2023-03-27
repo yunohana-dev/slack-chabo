@@ -12,12 +12,35 @@ import { TALK_HISTORY_DATASTORE } from "../constants/slack.ts";
 export const PostMessage = async (
   c: SlackAPIClient,
   cid: string,
-  msg: string,
+  text: string,
 ) => {
   return await c.chat.postMessage({
     channel: cid,
-    text: msg,
+    text: text,
   });
+};
+
+const uploadFile = async (
+  c: SlackAPIClient,
+  cid: string,
+  title: string,
+  content: string,
+  filetype: string,
+) => {
+  return await c.files.upload({
+    channels: cid,
+    title,
+    content,
+    filetype,
+  });
+};
+
+export const UploadTalkHistory = async (
+  c: SlackAPIClient,
+  cid: string,
+  content: string,
+) => {
+  return await uploadFile(c, cid, "talk history", content, "yaml");
 };
 
 const findItem = async (

@@ -3,6 +3,7 @@ import {
   DeleteTalkHistory,
   FindTalkHistory,
   PostMessage,
+  UploadTalkHistory,
 } from "../utils/slack.ts";
 
 const msg_help = `\`\`\`
@@ -69,10 +70,10 @@ export default SlackFunction(
         break;
       case "/show_history": {
         const history = await FindTalkHistory(client, inputs.user_id);
-        await PostMessage(
+        await UploadTalkHistory(
           client,
           inputs.channel_id,
-          msg_show_history(history),
+          JSON.stringify(history, null, 2),
         );
         break;
       }
