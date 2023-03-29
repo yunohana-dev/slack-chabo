@@ -4,13 +4,21 @@ import {
   CHATGPT_MODEL,
   SYSTEM_PROMPT,
 } from "../constants/chatGPT.ts";
-import { ERROR_MESSAGE, THINKING_MESSAGE } from "../constants/slack.ts";
+import {
+  ERROR_MESSAGE,
+  MESSAGE_TRIGGER_CHAR,
+  THINKING_MESSAGE,
+} from "../constants/slack.ts";
 import {
   FindTalkHistory,
   PostMessage,
   UpdateMessage,
   UpdateTalkHistory,
 } from "../utils/slack.ts";
+import {
+  ChunkToResponseArray,
+  ResponseArrayToContent,
+} from "../utils/chatGpt.ts";
 
 const systemPrompt = {
   role: "system",
@@ -84,6 +92,7 @@ export default SlackFunction(
             systemPrompt,
             userPrompt,
           ],
+          stream: true,
         }),
       },
     );
@@ -96,24 +105,63 @@ export default SlackFunction(
       await UpdateMessage(client, inputs.channel_id, reply.ts, ERROR_MESSAGE);
       return { error: reason };
     }
-    const body = await res.json();
-    console.log("Success to call OpenAPI AI. response: ", userPrompt, body);
 
-    if (!body.choices || body.choices.length < 1) {
-      const reason = `No choices provided. response: ${JSON.stringify(body)}`;
-      await UpdateMessage(client, inputs.channel_id, reply.ts, ERROR_MESSAGE);
-      return { error: reason };
-    }
-    const answer = body.choices[0].message.content as string;
+    let answer = "";
+    const decoder = new TextDecoder();
+    const reader = (res.body as ReadableStream).getReader();
+    const stream = new ReadableStream({
+      start(controller) {
+        return (function pump(): void | PromiseLike<void> {
+          return reader.read().then(
+            ({ done, value }) => {
+              if (done) {
+                return controller.close();
+              }
+              const raw = decoder.decode(value);
+              const res = ChunkToResponseArray(raw);
+              if (res.length < 1) {
+                controller.enqueue(value);
+                return pump();
+              }
+              const content = ResponseArrayToContent(res);
 
-    // 回答の送信
-    await UpdateMessage(client, inputs.channel_id, reply.ts, answer);
+              answer += content;
+              if (content.match(MESSAGE_TRIGGER_CHAR)) {
+                UpdateMessage(
+                  client,
+                  inputs.channel_id,
+                  reply.ts,
+                  answer,
+                );
+              }
+
+              controller.enqueue(value);
+              return pump();
+            },
+          );
+        })();
+      },
+    });
+    await new Response(stream).text();
+    UpdateMessage(
+      client,
+      inputs.channel_id,
+      reply.ts,
+      answer,
+    );
+
+    const assistantPrompt = { role: "assistant", content: answer };
+    console.log(
+      `Success to call OpenAPI AI. response:
+  user      : ${JSON.stringify(userPrompt)}
+  assistant : ${JSON.stringify(assistantPrompt)}`,
+    );
 
     // データストアの会話履歴を更新
     const new_histories = [
       ...history,
       userPrompt,
-      { role: "assistant", content: answer },
+      assistantPrompt,
     ];
     await UpdateTalkHistory(client, inputs.user_id, new_histories);
     return { outputs: {} };
