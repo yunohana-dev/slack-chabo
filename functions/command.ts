@@ -1,4 +1,5 @@
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
+import { FORGOTTEN_MESSAGE } from "../constants/slack.ts";
 import {
   DeleteTalkHistory,
   FindTalkHistory,
@@ -7,15 +8,9 @@ import {
 } from "../utils/slack.ts";
 
 const msg_help = `\`\`\`
-- /show_history: これまでの会話履歴を表示する
-- /clear_history: これまでの会話履歴を忘れる
+- /show_history(/show)  : これまでの会話履歴を表示する
+- /clear_history(/clear): これまでの会話履歴を忘れる
 \`\`\``;
-const msg_show_history = (history: unknown) => {
-  return `\`\`\`
-${JSON.stringify(history, null, 2)}
-\`\`\``;
-};
-const msg_delete_history = "あれ、なんの話をしていましたっけ？";
 const msg_default = `\`/\` から始めるときはコマンドを入力してください
 コマンドは \`/help\` で確認できます`;
 
@@ -68,6 +63,7 @@ export default SlackFunction(
       case "/help":
         await PostMessage(client, inputs.channel_id, msg_help);
         break;
+      case "/show":
       case "/show_history": {
         const history = await FindTalkHistory(client, inputs.user_id);
         await UploadTalkHistory(
@@ -77,12 +73,13 @@ export default SlackFunction(
         );
         break;
       }
+      case "/clear":
       case "/clear_history":
         await DeleteTalkHistory(client, inputs.user_id);
         await PostMessage(
           client,
           inputs.channel_id,
-          msg_delete_history,
+          FORGOTTEN_MESSAGE,
         );
         break;
       default:

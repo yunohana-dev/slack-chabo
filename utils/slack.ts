@@ -16,7 +16,25 @@ export const PostMessage = async (
 ) => {
   return await c.chat.postMessage({
     channel: cid,
-    text: text,
+    text,
+  });
+};
+
+/**
+ * TimeStampで指定するメッセージを更新する
+ * @param cid Channel ID
+ * @param ts Message TimeStamp
+ */
+export const UpdateMessage = async (
+  c: SlackAPIClient,
+  cid: string,
+  ts: string,
+  text: string,
+) => {
+  return await c.chat.update({
+    channel: cid,
+    ts,
+    text,
   });
 };
 

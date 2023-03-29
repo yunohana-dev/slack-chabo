@@ -4,7 +4,13 @@ import {
   CHATGPT_MODEL,
   SYSTEM_PROMPT,
 } from "../constants/chatGPT.ts";
-import { FindTalkHistory, UpdateTalkHistory } from "../utils/slack.ts";
+import { ERROR_MESSAGE, THINKING_MESSAGE } from "../constants/slack.ts";
+import {
+  FindTalkHistory,
+  PostMessage,
+  UpdateMessage,
+  UpdateTalkHistory,
+} from "../utils/slack.ts";
 
 const systemPrompt = {
   role: "system",
@@ -18,6 +24,10 @@ export const askGPTFunction = DefineFunction({
   source_file: "functions/askGPT.ts",
   input_parameters: {
     properties: {
+      channel_id: {
+        type: Schema.slack.types.channel_id,
+        description: "Channel ID",
+      },
       user_id: {
         type: Schema.slack.types.user_id,
         description: "User ID",
@@ -32,30 +42,24 @@ export const askGPTFunction = DefineFunction({
         default: false,
       },
     },
-    required: ["user_id", "message"],
-  },
-  output_parameters: {
-    properties: {
-      answer: {
-        type: Schema.types.string,
-        description: "Answer from AI",
-      },
-      error: {
-        type: Schema.types.string,
-        description: "Error Type",
-      },
-    },
-    required: [],
+    required: ["channel_id", "user_id", "message"],
   },
 });
 
 export default SlackFunction(
   askGPTFunction,
   async ({ inputs, client, env }) => {
-    if (inputs.is_aborted) return { outputs: { answer: "" } };
+    if (inputs.is_aborted) return { outputs: {} };
 
-    // メッセージからメンションを削除
-    const content = inputs.message.replaceAll(/\<\@.+?\>/g, " ").trim();
+    // 受理を送信
+    const reply = await PostMessage(
+      client,
+      inputs.channel_id,
+      THINKING_MESSAGE,
+    );
+
+    // ユーザプロンプトの生成
+    const content = inputs.message.replaceAll(/\<\@.+?\>/g, " ").trim(); // メンションの削除
     const userPrompt = {
       role: "user",
       content,
@@ -86,20 +90,25 @@ export default SlackFunction(
 
     if (res.status != 200) {
       const body = await res.text();
-      const msg =
+      const reason =
         `Failed to call OpenAPI AI. status: ${res.status} body:${body}`;
-      console.log(msg);
-      return { outputs: { error: msg } };
+      console.log(reason);
+      await UpdateMessage(client, inputs.channel_id, reply.ts, ERROR_MESSAGE);
+      return { error: reason };
     }
     const body = await res.json();
     console.log("Success to call OpenAPI AI. response: ", userPrompt, body);
 
     if (!body.choices || body.choices.length < 1) {
-      const msg = `No choices provided. response: ${JSON.stringify(body)}`;
-      return { outputs: { error: msg } };
+      const reason = `No choices provided. response: ${JSON.stringify(body)}`;
+      await UpdateMessage(client, inputs.channel_id, reply.ts, ERROR_MESSAGE);
+      return { error: reason };
     }
-
     const answer = body.choices[0].message.content as string;
+
+    // 回答の送信
+    await UpdateMessage(client, inputs.channel_id, reply.ts, answer);
+
     // データストアの会話履歴を更新
     const new_histories = [
       ...history,
@@ -107,6 +116,6 @@ export default SlackFunction(
       { role: "assistant", content: answer },
     ];
     await UpdateTalkHistory(client, inputs.user_id, new_histories);
-    return { outputs: { answer } };
+    return { outputs: {} };
   },
 );
