@@ -4,6 +4,7 @@ import {
   DatastoreSchema,
 } from "deno-slack-api/typed-method-types/apps.ts";
 import { TALK_HISTORY_DATASTORE } from "../constants/slack.ts";
+import { OpenAIPrompt } from "./chatGpt.ts";
 
 /**
  * IDで指定する先のチャネルへメッセージを投稿する
@@ -81,7 +82,9 @@ export const FindTalkHistory = async (
   uid: string,
 ) => {
   const res = await findItem(c, uid, TALK_HISTORY_DATASTORE);
-  return (res.item.history || []).map((h: string) => JSON.parse(h));
+  return (res.item.history || []).map((h: string) =>
+    JSON.parse(h)
+  ) as OpenAIPrompt[];
 };
 
 const updateItem = async (

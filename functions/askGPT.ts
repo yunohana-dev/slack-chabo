@@ -2,6 +2,7 @@ import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 import {
   CHATGPT_API_URL,
   CHATGPT_MODEL,
+  HISTORY_RETENTION_COUNT,
   SYSTEM_PROMPT,
 } from "../constants/chatGPT.ts";
 import {
@@ -88,7 +89,7 @@ export default SlackFunction(
         body: JSON.stringify({
           model: CHATGPT_MODEL,
           messages: [
-            ...history,
+            ...history.slice(HISTORY_RETENTION_COUNT * -2),
             systemPrompt,
             userPrompt,
           ],

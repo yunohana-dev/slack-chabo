@@ -1,3 +1,8 @@
+export type OpenAIPrompt = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
 type OpenAIStreamResponse = {
   id: string;
   object: string;
