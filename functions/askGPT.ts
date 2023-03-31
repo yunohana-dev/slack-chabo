@@ -1,8 +1,8 @@
+import { green, red } from "https://deno.land/std@0.181.0/fmt/colors.ts";
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 import {
   CHATGPT_API_URL,
   CHATGPT_MODEL,
-  HISTORY_RETENTION_COUNT,
   SYSTEM_PROMPT,
 } from "../constants/chatGPT.ts";
 import {
@@ -76,6 +76,8 @@ export default SlackFunction(
 
     // データストアから会話履歴を取得
     const history = await FindTalkHistory(client, inputs.user_id);
+    const historyRetentionCount = parseInt(env.CHABO_HISTORY_RETENTION_COUNT) ||
+      0;
 
     // ChatGPTへリクエスト
     const res = await fetch(
@@ -89,7 +91,7 @@ export default SlackFunction(
         body: JSON.stringify({
           model: CHATGPT_MODEL,
           messages: [
-            ...history.slice(HISTORY_RETENTION_COUNT * -2),
+            ...history.slice(historyRetentionCount * -2),
             systemPrompt,
             userPrompt,
           ],
@@ -97,12 +99,11 @@ export default SlackFunction(
         }),
       },
     );
-
     if (res.status != 200) {
       const body = await res.text();
       const reason =
         `Failed to call OpenAPI AI. status: ${res.status} body:${body}`;
-      console.log(reason);
+      console.log(red(reason));
       await UpdateMessage(client, inputs.channel_id, reply.ts, ERROR_MESSAGE);
       return { error: reason };
     }
@@ -152,11 +153,9 @@ export default SlackFunction(
     );
 
     const assistantPrompt = { role: "assistant", content: answer };
-    console.log(
-      `Success to call OpenAPI AI. response:
+    console.log(green(`talk with OpenAI:
   user      : ${JSON.stringify(userPrompt)}
-  assistant : ${JSON.stringify(assistantPrompt)}`,
-    );
+  assistant : ${JSON.stringify(assistantPrompt)}`));
 
     // データストアの会話履歴を更新
     const new_histories = [

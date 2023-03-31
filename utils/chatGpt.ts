@@ -1,3 +1,4 @@
+import { red } from "https://deno.land/std@0.181.0/fmt/colors.ts";
 export type OpenAIPrompt = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -28,12 +29,16 @@ export const ChunkToResponseArray = (raw: string) => {
   const lines = raw.split(/\n?data:/g).map((s) => s.trim()).filter((s) => s);
   const result = [];
   for (const l of lines) {
+    if (l === "[DONE]") {
+      // console.log(`reach the end of chunk: ${l}`);
+      continue;
+    }
     try {
       const stream = JSON.parse(l) as OpenAIStreamResponse;
-      // console.log(JSON.stringify(stream));
+      // console.log(JSON.stringify(l));
       result.push(stream);
     } catch (e) {
-      console.log(`"${l}" is not JSON format: `, e);
+      console.log(red(`"${l}" is not JSON format: ${e}`));
     }
   }
   return result;

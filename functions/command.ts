@@ -1,3 +1,4 @@
+import { green } from "https://deno.land/std@0.181.0/fmt/colors.ts";
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
 import { FORGOTTEN_MESSAGE } from "../constants/slack.ts";
 import {
@@ -57,7 +58,7 @@ export default SlackFunction(
     const content = inputs.message.replaceAll(/\<\@.+?\>/g, " ").trim();
     if (!content.startsWith("/")) return { outputs: {} };
 
-    console.log("accepted command: ", content);
+    console.log(green(`execute command: ${content}`));
     // コマンド分岐
     switch (content) {
       case "/help":
