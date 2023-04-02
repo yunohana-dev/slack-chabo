@@ -1,25 +1,8 @@
-import { green, red } from "https://deno.land/std@0.181.0/fmt/colors.ts";
 import { DefineFunction, Schema, SlackFunction } from "deno-slack-sdk/mod.ts";
-import {
-  CHATGPT_API_URL,
-  CHATGPT_MODEL,
-  SYSTEM_PROMPT,
-} from "../constants/chatGPT.ts";
-import {
-  ERROR_MESSAGE,
-  MESSAGE_TRIGGER_CHAR,
-  THINKING_MESSAGE,
-} from "../constants/slack.ts";
-import {
-  FindTalkHistory,
-  PostMessage,
-  UpdateMessage,
-  UpdateTalkHistory,
-} from "../utils/slack.ts";
-import {
-  ChunkToResponseArray,
-  ResponseArrayToContent,
-} from "../utils/chatGpt.ts";
+import { SYSTEM_PROMPT } from "../constants/chatGPT.ts";
+import { THINKING_MESSAGE } from "../constants/slack.ts";
+import { FindTalkHistory, PostMessage } from "../utils/slack.ts";
+import { green } from "https://deno.land/std@0.181.0/fmt/colors.ts";
 
 const systemPrompt = {
   role: "system",
@@ -79,91 +62,35 @@ export default SlackFunction(
     const historyRetentionCount = parseInt(env.CHABO_HISTORY_RETENTION_COUNT) ||
       0;
 
-    // ChatGPTへリクエスト
-    const res = await fetch(
-      CHATGPT_API_URL,
+    // 声帯へリクエスト
+    const req = {
+      callback: env.CALLBACK_URI,
+      channel_id: inputs.channel_id,
+      user_id: inputs.user_id,
+      message_ts: reply.ts,
+      openai_api_key: env.OPENAI_API_KEY,
+      prompt: [
+        ...history.slice(historyRetentionCount * -2),
+        systemPrompt,
+        userPrompt,
+      ],
+    };
+    fetch(
+      env.VOCAL_CORDS_URI,
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: CHATGPT_MODEL,
-          messages: [
-            ...history.slice(historyRetentionCount * -2),
-            systemPrompt,
-            userPrompt,
-          ],
-          stream: true,
-        }),
+        body: JSON.stringify(req),
       },
     );
-    if (res.status != 200) {
-      const body = await res.text();
-      const reason =
-        `Failed to call OpenAPI AI. status: ${res.status} body:${body}`;
-      console.log(red(reason));
-      await UpdateMessage(client, inputs.channel_id, reply.ts, ERROR_MESSAGE);
-      return { error: reason };
-    }
-
-    let answer = "";
-    const decoder = new TextDecoder();
-    const reader = (res.body as ReadableStream).getReader();
-    const stream = new ReadableStream({
-      start(controller) {
-        return (function pump(): void | PromiseLike<void> {
-          return reader.read().then(
-            ({ done, value }) => {
-              if (done) {
-                return controller.close();
-              }
-              const raw = decoder.decode(value);
-              const res = ChunkToResponseArray(raw);
-              if (res.length < 1) {
-                controller.enqueue(value);
-                return pump();
-              }
-              const content = ResponseArrayToContent(res);
-
-              answer += content;
-              if (content.match(MESSAGE_TRIGGER_CHAR)) {
-                UpdateMessage(
-                  client,
-                  inputs.channel_id,
-                  reply.ts,
-                  answer,
-                );
-              }
-
-              controller.enqueue(value);
-              return pump();
-            },
-          );
-        })();
-      },
-    });
-    await new Response(stream).text();
-    UpdateMessage(
-      client,
-      inputs.channel_id,
-      reply.ts,
-      answer,
-    );
-
-    const assistantPrompt = { role: "assistant", content: answer };
-    console.log(green(`talk with OpenAI:
-  user      : ${JSON.stringify(userPrompt)}
-  assistant : ${JSON.stringify(assistantPrompt)}`));
-
-    // データストアの会話履歴を更新
-    const new_histories = [
-      ...history,
-      userPrompt,
-      assistantPrompt,
-    ];
-    await UpdateTalkHistory(client, inputs.user_id, new_histories);
+    console.log(green("request to VocalCords."));
+    await sleep();
     return { outputs: {} };
   },
 );
+
+const sleep = () => {
+  return new Promise((r) => setTimeout(r, 3000));
+};

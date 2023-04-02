@@ -92,7 +92,7 @@ const updateItem = async (
   item: DatastoreItem<DatastoreSchema>,
   ds: string,
 ) => {
-  await c.apps.datastore.update({
+  return await c.apps.datastore.update({
     datastore: ds,
     item: item,
   });
@@ -111,7 +111,7 @@ export const UpdateTalkHistory = async (
     id: uid,
     history: histories.map((h) => JSON.stringify(h)),
   };
-  await updateItem(c, item, TALK_HISTORY_DATASTORE);
+  return await updateItem(c, item, TALK_HISTORY_DATASTORE);
 };
 
 const deleteItem = async (

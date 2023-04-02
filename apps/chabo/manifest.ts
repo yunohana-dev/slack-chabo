@@ -1,6 +1,7 @@
 import { Manifest } from "deno-slack-sdk/mod.ts";
 import ChaboWorkflow from "./workflows/chabo.ts";
 import { TalkHistoriesDatastore } from "./datastores/talkHistory.ts";
+import TalkWorkflow from "./workflows/talk.ts";
 
 /**
  * The app manifest contains the app's configuration. This
@@ -14,12 +15,14 @@ export default Manifest({
   functions: [],
   workflows: [
     ChaboWorkflow,
+    TalkWorkflow,
   ],
   datastores: [
     TalkHistoriesDatastore,
   ],
   outgoingDomains: [
-    "api.openai.com",
+    // FIXME vocal-codesをホスティングするDomain
+    "XXXXXXXXXX.lambda-url.ap-northeast-1.on.aws",
   ],
   botScopes: [
     "commands",
